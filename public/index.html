@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Captura la Bandera 3D · Avengers Edition</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="./styles.css">
+<!-- Three.js: motor 3D principal (debe ir antes que game3d.js) -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+</head>
+<body>
+
+<div id="loader">
+  <div class="loader-box">
+    <div class="loader-title">CAPTURA LA BANDERA <span>3D</span></div>
+    <div class="loader-bar"><i></i></div>
+    <div class="loader-note" id="loaderNote">Cargando motor 3D…</div>
+  </div>
+</div>
+
+<div id="menu">
+  <h1>⚡ CAPTURA LA BANDERA <span class="tag3d">3D</span></h1>
+  <p class="subtitle">Avengers Edition · Multijugador Online · vs Bot</p>
+  <input type="text" id="username" placeholder="Tu nombre de usuario" maxlength="14" value="Jugador" autocomplete="off">
+
+  <div id="mainButtons">
+    <button id="btnCreate">Crear Sala (Online)</button>
+    <button id="btnJoin" class="secondary">Unirse a Sala</button>
+    <button id="btnBot" class="alt">Jugar vs Bot</button>
+  </div>
+
+  <div id="charSection" style="display:none">
+    <div class="section-title">Elige tu personaje</div>
+    <div id="charGrid"></div>
+  </div>
+
+  <div id="mapSection" style="display:none">
+    <div class="section-title">Elige el mapa <span id="mapPreviewNote" class="mini-note"></span></div>
+    <select id="mapSelect">
+      <option value="classic">Clásico — columnas y pasillos</option>
+      <option value="labyrinth">Laberinto — callejones estrechos</option>
+      <option value="open">Campo Abierto — pocas coberturas</option>
+      <option value="fortress">Fortaleza — bases amuralladas</option>
+      <option value="cross">Cruce — centro disputado</option>
+    </select>
+  </div>
+
+  <div id="joinSection" style="display:none">
+    <input type="text" id="roomCode" placeholder="Código de 5 letras (ej: K7M2P)" autocomplete="off" class="code-input">
+    <div class="row">
+      <button id="btnDoJoin">Unirse</button>
+      <button id="btnBack" class="secondary">Volver</button>
+    </div>
+  </div>
+
+  <div id="botSection" style="display:none">
+    <select id="difficulty">
+      <option value="easy">Fácil</option>
+      <option value="medium" selected>Normal</option>
+      <option value="hard">Difícil</option>
+    </select>
+    <div class="row">
+      <button id="btnStartBot">Empezar</button>
+      <button id="btnBackBot" class="secondary">Volver</button>
+    </div>
+  </div>
+
+  <div id="waitingSection" style="display:none">
+    <p><b>Copia este código y mándaselo a tu amigo:</b></p>
+    <div id="roomInfo">---</div>
+    <div class="row">
+      <button id="btnCopyCode" type="button">📋 Copiar código</button>
+      <button id="btnCopyLink" type="button" class="alt">🔗 Copiar enlace directo</button>
+    </div>
+    <p class="hint-text">Tu amigo debe pulsar UNIRSE y pegar el código (o abrir el enlace directo).<br>No cierres esta ventana.</p>
+    <button id="btnCancel" class="secondary">Cancelar</button>
+  </div>
+
+  <p id="status"></p>
+
+  <div class="settings">
+    <div class="section-title">Ajustes 3D</div>
+    <div class="settings-grid">
+      <label>Cámara
+        <select id="camMode">
+          <option value="auto" selected>Automática</option>
+          <option value="tactical">Táctica (mundo completo)</option>
+          <option value="third">Tercera persona</option>
+          <option value="first">Primera persona</option>
+        </select>
+      </label>
+      <label>Calidad
+        <select id="quality">
+          <option value="high" selected>Alta (sombras)</option>
+          <option value="medium">Media</option>
+          <option value="low">Baja (todo suave)</option>
+        </select>
+      </label>
+      <label>Gráficos
+        <select id="gfx">
+          <option value="3d" selected>3D</option>
+          <option value="2d">2D (clásico)</option>
+        </select>
+      </label>
+      <label>Zoom de cámara <output id="camDistOut">100%</output>
+        <input type="range" id="camDist" min="60" max="150" value="100">
+      </label>
+      <label>Volumen <output id="volOut">70%</output>
+        <input type="range" id="vol" min="0" max="100" value="70">
+      </label>
+      <label class="check"><input type="checkbox" id="shake"> Vibración de cámara</label>
+    </div>
+    <p class="hint-text">En partida: <b>W</b> adelante · <b>A</b> atrás · <b>Q</b> izquierda · <b>E</b> derecha (flechas igual) · <b>Ratón</b> apuntar · <b>Clic izq.</b> disparar · <b>Botón der. + ratón</b> girar cámara · <b>L</b> bloquear cámara libre · <b>Shift</b> boost · <b>Espacio</b> escudo · <b>R</b> disparo · <b>F</b> habilidad · <b>1/2/3</b> equipo de héroe · <b>C</b> cámara · <b>H</b> pantalla completa</p>
+  </div>
+</div>
+
+<div id="gameContainer">
+  <canvas id="game3d"></canvas>
+  <canvas id="game2d" class="hidden" width="900" height="560"></canvas>
+
+  <div id="hud">
+    <div class="score-box red" id="scoreRed">ROJO<br>0</div>
+    <div class="score-mid">
+      <div class="score-center" id="scoreCenter">0 - 0</div>
+      <div class="score-goal">Primero a 3 gana</div>
+      <div class="score-clock" id="clock">0:00</div>
+    </div>
+    <div class="score-box blue" id="scoreBlue">AZUL<br>0</div>
+  </div>
+
+  <div id="killfeed"></div>
+
+  <div id="powers">
+    <div class="power ready" id="p1"><b>Shift</b> Boost</div>
+    <div class="power ready" id="p2"><b>Espacio</b> Escudo</div>
+    <div class="power ready" id="p3"><b>R</b> Disparo</div>
+  </div>
+
+  <div id="stanceBar">
+    <div class="stance" id="st1">1 · Guardián</div>
+    <div class="stance active" id="st2">2 · Francotirador</div>
+    <div class="stance" id="st3">3 · Ágil</div>
+  </div>
+
+  <div id="controlsHint">W adelante · A atrás · Q izquierda · E derecha · RATÓN apuntar · CLIC disparar · BOTÓN DERECHO girar cámara · SHIFT Boost · ESPACIO Escudo · R Disparo · F Habilidad · L cámara libre</div>
+
+  <div id="btnUI">
+    <button id="btnPrim" title="Habilidad del personaje (F)">F · Habilidad</button>
+    <button id="btnOrbit" title="Bloquear cámara libre (L) — mantén botón derecho y mueve el ratón">🖱 Cámara libre</button>
+    <button id="btnCam" title="Cambiar cámara (C)">C · Cámara</button>
+    <button id="btnFull" title="Pantalla completa (H)">⛶</button>
+    <button id="btnQuit" title="Salir al menú">✕</button>
+  </div>
+
+  <div id="endScreen">
+    <h2 id="endTitle">¡Victoria!</h2>
+    <p id="endStats" class="end-stats"></p>
+    <div class="row">
+      <button id="btnReplay">Jugar otra vez</button>
+      <button id="btnMenu" class="secondary">Menú</button>
+    </div>
+  </div>
+</div>
+
+<script src="./js/sprites.js"></script>
+<script src="./js/audio.js"></script>
+<script src="./js/maps3d.js"></script>
+<script src="./js/net.js"></script>
+<script src="./js/models3d.js"></script>
+<script src="./js/game.js"></script>
+<script src="./js/game3d.js"></script>
+<script src="./js/ui.js"></script>
+</body>
+</html>

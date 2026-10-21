@@ -1,0 +1,14 @@
+{
+  "name": "ctf-avengers-3d",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Captura la Bandera - Avengers Edition 3D (servidor HTTP + WebSocket para multijugador)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
