@@ -249,9 +249,9 @@
     return sunLight;
   }
 
-  function buildHeroNode(charId, team) {
+  function buildHeroNode(charId, team, acc) {
     var ch = Models3D.getChar(charId);
-    var built = Models3D.buildHero(ch);
+    var built = Models3D.buildHero(ch, acc || null);
     var group = built.group;
     group.userData.parts = built.parts;
     group.userData.char = ch;
@@ -425,7 +425,10 @@
 
     scene = new THREE_.Scene();
     scene.background = new THREE_.Color(0x080812);
-    scene.fog = new THREE_.Fog(0x080812, 12, 34);
+    // La niebla tenue daba un "muro negro" a 34 unidades (el mapa mide 98x90):
+    // se aleja para que las estructuras lejanas sigan leyendose sin perder la
+    // atmosfera nocturna.
+    scene.fog = new THREE_.Fog(0x080812, 18, 70);
 
     camera = new THREE_.PerspectiveCamera(50, 16 / 9, 0.1, 120);
     buildLighting();
@@ -453,7 +456,7 @@
         scene.remove(heroNodes[team]);
         disposeGroup(heroNodes[team]);
       }
-      var node = buildHeroNode(Game.players[team].charId, team);
+      var node = buildHeroNode(Game.players[team].charId, team, Game.players[team].acc);
       node.userData.team = team;
       scene.add(node);
       heroNodes[team] = node;
@@ -488,7 +491,7 @@
       scene.remove(node);
       disposeGroup(node);
     }
-    var fresh = buildHeroNode(Game.players[team].charId, team);
+    var fresh = buildHeroNode(Game.players[team].charId, team, Game.players[team].acc);
     fresh.userData.team = team;
     scene.add(fresh);
     heroNodes[team] = fresh;
@@ -550,7 +553,7 @@
 
   /** Ajusta la distancia de orbita con la rueda del raton. */
   View.orbitZoomBy = function (dy) {
-    View.orbitDist = Math.max(0.35, Math.min(3, View.orbitDist + dy * 0.0016));
+    View.orbitDist = Math.max(0.8, Math.min(2.5, View.orbitDist + dy * 0.0016));
     return View.orbitDist;
   };
 
@@ -648,8 +651,11 @@
       }
       var camAng = manual ? View.orbitYaw : View.camYaw;
 
-      var back = (1.85 / View.zoom) * View.orbitDist;
-      var high = 1.05 / View.zoom;
+      // Suelo de distancias: con orbitDist 0.35 y zoom 1.5 la camara quedaba a
+      // 0.43 del heroe y su espalda llena la pantalla (se veia un "plano" liso).
+      // Con 3.4 de base el heroe ocupa ~la mitad del encuadre y se ve el campo.
+      var back = Math.max(3, (3.4 / View.zoom) * View.orbitDist);
+      var high = Math.max(1.3, 1.5 / View.zoom);
       var pitch = View.orbitPitch;
       var behindX = wx(me.x) - Math.cos(camAng) * back * Math.cos(pitch);
       var behindZ = wz(me.y) - Math.sin(camAng) * back * Math.cos(pitch);

@@ -6,7 +6,9 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "test": "node test-models.js && node test-input.js && node test-ui-ids.js",
+    "test:net": "node test-net.js && node test-acc-net.js"
   },
   "engines": {
     "node": ">=18"

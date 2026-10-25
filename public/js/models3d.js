@@ -201,13 +201,21 @@
   /**
    * Crea la geometria base de un heroe mirando hacia +Z.
    * Devuelve { group, parts } donde parts permite animar.
+   *
+   * acc = { hat, cape, outfit, face } -> accesorios gratuitos del jugador.
+   * Un "outfit" recolorea el traje (cloth/trim) sin tocar la cabeza ni el
+   * arma, para que el heroe siga siendo reconocible.
    */
-  function buildHero(char) {
+  function buildHero(char, acc) {
     var klass = getClass(char.klass);
     var s = char.big || 1;
-    var suit = char.suit;
-    var accent = char.accent;
+    var heroSuit = char.suit;
+    var heroAccent = char.accent;
     var skin = char.skin;
+
+    var outfitDef = acc && acc.outfit ? accessoryById(acc.outfit) : null;
+    var suit = outfitDef && outfitDef.suitColor != null ? outfitDef.suitColor : char.suit;
+    var accent = outfitDef && outfitDef.trimColor != null ? outfitDef.trimColor : char.accent;
 
     var group = new THREE.Group();
     var parts = {};
@@ -288,7 +296,7 @@
 
     // nucleo luminoso (Iron Man, War Machine, Ultron, Vision)
     if (char.id === "ironman" || char.id === "mk2" || char.id === "ultron" || char.id === "warmachine" || char.id === "vision") {
-      var core = sphere(0.055 * s, accent, { emissive: accent, emissiveIntensity: 2.4 }, 16);
+      var core = sphere(0.055 * s, heroAccent, { emissive: heroAccent, emissiveIntensity: 2.4 }, 16);
       core.position.set(0, 0.24 * s, 0.16 * s);
       torso.add(core);
       parts.core = core;
@@ -348,11 +356,14 @@
     skull.scale.set(1, 1.02, 0.98);
     headShape.add(skull);
 
-    // ---- rasgos segun el tipo de cabeza ----
-    buildHead(headShape, char, s, suit, accent, skin);
+    // ---- rasgos segun el tipo de cabeza (siempre los del heroe) ----
+    buildHead(headShape, char, s, heroSuit, heroAccent, skin);
 
-    // ---- capa ----
-    if (char.cape) {
+    // ---- capa: la del personaje o la elegida por el jugador ----
+    var accCape = acc && acc.cape ? accessoryById(acc.cape) : null;
+    if (accCape) {
+      parts.cape = buildAccCape(group, s, accCape);
+    } else if (char.cape) {
       parts.cape = buildCape(group, char.cape, s);
     }
 
@@ -367,13 +378,669 @@
     }
 
     // ---- arma / accesorio segun personaje y clase ----
-    parts.weapon = buildWeapon(char, klass, s, accent, armHi);
+    parts.weapon = buildWeapon(char, klass, s, heroAccent, armHi);
 
     // ---- extras iconicos por personaje ----
-    addCharacterExtras(char, s, group, torso, armLo, armHi, parts, suit, accent);
+    addCharacterExtras(char, s, group, torso, armLo, armHi, parts, heroSuit, heroAccent);
+
+    // ---- accesorios gratuitos elegidos en el menu ----
+    if (outfitDef) applyOutfitExtras(group, torso, s, outfitDef);
+    var accFace = acc && acc.face ? accessoryById(acc.face) : null;
+    if (accFace) buildFaceAcc(headShape, s, accFace, heroAccent);
+    var accHat = acc && acc.hat ? accessoryById(acc.hat) : null;
+    if (accHat) buildHatAcc(headShape, s, accHat);
 
     group.userData.height = 1.62 * s;
+    group.userData.acc = acc || null;
     return { group: group, parts: parts, klass: klass, scale: s };
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Accesorios gratuitos (sombreros, capas, ropa y cara)
+   * ------------------------------------------------------------------ */
+
+  function accessoryById(id) {
+    if (!id) return null;
+    if (window.ACCESSORIES) {
+      for (var i = 0; i < window.ACCESSORIES.length; i++) {
+        if (window.ACCESSORIES[i].id === id) return window.ACCESSORIES[i];
+      }
+    }
+    return null;
+  }
+
+  /** Media esfera (base de cascos y gorros). */
+  function hemi(r, color, opts) {
+    return new THREE.Mesh(
+      new THREE.SphereGeometry(r, 24, 14, 0, Math.PI * 2, 0, Math.PI / 2),
+      mat(color, opts)
+    );
+  }
+
+  /** Cilindro (coronas, sombreros, botas). */
+  function cyl(rt, rb, h, color, opts, seg) {
+    return new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg || 22), mat(color, opts));
+  }
+
+  /** Cono (puntas de gorros, cuernos, picos). */
+  function cone(r, h, color, opts, seg) {
+    return new THREE.Mesh(new THREE.ConeGeometry(r, h, seg || 18), mat(color, opts));
+  }
+
+  /**
+   * SOMBREROS: se colocan sobre headShape (craneo de radio 0.3*s, asi que
+   * la "linea del pelo" esta en y ~ 0.27*s).
+   */
+  function buildHatAcc(head, s, def) {
+    var g = new THREE.Group();
+    var c = def.color;
+    var base = 0.26 * s;
+    var shape = def.shape;
+
+    switch (shape) {
+      case "tophat": {
+        var brim = cyl(0.34 * s, 0.34 * s, 0.035 * s, c, { suit: true });
+        brim.position.y = base;
+        g.add(brim);
+        var crown = cyl(0.2 * s, 0.21 * s, 0.3 * s, c, { suit: true });
+        crown.position.y = base + 0.16 * s;
+        g.add(crown);
+        var band = cyl(0.215 * s, 0.215 * s, 0.055 * s, 0xd02030, { suit: true });
+        band.position.y = base + 0.05 * s;
+        g.add(band);
+        break;
+      }
+      case "party": {
+        var pcone = cone(0.2 * s, 0.44 * s, c, { suit: true });
+        pcone.position.y = base + 0.2 * s;
+        pcone.rotation.z = 0.14;
+        g.add(pcone);
+        for (var i = 0; i < 2; i++) {
+          var rr = (0.16 - i * 0.05) * s;
+          var stripe = cyl(rr * 0.85, rr, 0.05 * s, i % 2 ? 0xffe14d : 0x22d3ee, { suit: true });
+          stripe.position.y = base + 0.12 * s + i * 0.13 * s;
+          stripe.rotation.z = 0.14;
+          g.add(stripe);
+        }
+        var pom = sphere(0.06 * s, 0xffffff, { roughness: 0.9 }, 14);
+        pom.position.set(0.06 * s, base + 0.42 * s, 0);
+        g.add(pom);
+        break;
+      }
+      case "panama": {
+        var brim2 = cyl(0.5 * s, 0.52 * s, 0.03 * s, c, { suit: true, roughness: 0.85 });
+        brim2.position.y = base;
+        g.add(brim2);
+        var crown2 = cyl(0.22 * s, 0.24 * s, 0.16 * s, c, { suit: true, roughness: 0.85 });
+        crown2.position.y = base + 0.09 * s;
+        g.add(crown2);
+        var band2 = cyl(0.245 * s, 0.245 * s, 0.045 * s, 0x1a3a8a, { suit: true });
+        band2.position.y = base + 0.03 * s;
+        g.add(band2);
+        break;
+      }
+      case "crown": {
+        var ring = cyl(0.24 * s, 0.24 * s, 0.11 * s, c, { suit: true, metalness: 0.9, roughness: 0.2 });
+        ring.position.y = base + 0.05 * s;
+        g.add(ring);
+        for (var k = 0; k < 6; k++) {
+          var sp = cone(0.05 * s, 0.14 * s, c, { suit: true, metalness: 0.9, roughness: 0.2 }, 8);
+          var a = (k / 6) * Math.PI * 2;
+          sp.position.set(Math.cos(a) * 0.2 * s, base + 0.16 * s, Math.sin(a) * 0.2 * s);
+          g.add(sp);
+          var gem = sphere(0.032 * s, k % 2 ? 0xff2f6b : 0x22d3ee, { emissive: k % 2 ? 0xff2f6b : 0x22d3ee, emissiveIntensity: 0.8 }, 10);
+          gem.position.set(Math.cos(a) * 0.225 * s, base + 0.05 * s, Math.sin(a) * 0.225 * s);
+          g.add(gem);
+        }
+        break;
+      }
+      case "viking": {
+        var dome = hemi(0.32 * s, c, { suit: true, metalness: 0.7, roughness: 0.3 });
+        dome.position.y = base - 0.02 * s;
+        g.add(dome);
+        var rim = torus(0.31 * s, 0.035 * s, 0x4a3a24, { suit: true });
+        rim.rotation.x = Math.PI / 2;
+        rim.position.y = base;
+        g.add(rim);
+        [-1, 1].forEach(function (side) {
+          var horn = cone(0.07 * s, 0.3 * s, 0xf0e6d0, { roughness: 0.55 }, 12);
+          horn.position.set(side * 0.3 * s, base + 0.13 * s, 0);
+          horn.rotation.z = -side * 0.7;
+          horn.rotation.x = -0.2;
+          g.add(horn);
+        });
+        var nose = box2(0.05 * s, 0.18 * s, 0.05 * s, c, { suit: true, metalness: 0.7 });
+        nose.position.set(0, base - 0.07 * s, 0.29 * s);
+        g.add(nose);
+        break;
+      }
+      case "cowboy": {
+        var brim3 = cyl(0.5 * s, 0.52 * s, 0.035 * s, c, { suit: true, roughness: 0.85 });
+        brim3.position.y = base;
+        brim3.rotation.x = 0.06;
+        g.add(brim3);
+        [-1, 1].forEach(function (side) {
+          var curl = torus(0.24 * s, 0.045 * s, c, { suit: true, roughness: 0.85 }, Math.PI);
+          curl.position.set(side * 0.26 * s, base + 0.06 * s, 0);
+          curl.rotation.y = Math.PI / 2;
+          curl.rotation.z = side > 0 ? 0 : Math.PI;
+          g.add(curl);
+        });
+        var crown3 = cyl(0.21 * s, 0.25 * s, 0.24 * s, c, { suit: true, roughness: 0.85 });
+        crown3.position.y = base + 0.13 * s;
+        g.add(crown3);
+        var dent = sphere(0.1 * s, c, { suit: true, roughness: 0.85 });
+        dent.scale.set(1, 0.4, 1.7);
+        dent.position.y = base + 0.25 * s;
+        g.add(dent);
+        var band3 = cyl(0.255 * s, 0.255 * s, 0.05 * s, 0x2a1a10, { suit: true });
+        band3.position.y = base + 0.04 * s;
+        g.add(band3);
+        break;
+      }
+      case "witch": {
+        var brim4 = cyl(0.46 * s, 0.48 * s, 0.03 * s, c, { suit: true, roughness: 0.8 });
+        brim4.position.y = base;
+        brim4.rotation.z = 0.08;
+        g.add(brim4);
+        var wcone = cone(0.2 * s, 0.5 * s, c, { suit: true, roughness: 0.8 });
+        wcone.position.set(0.03 * s, base + 0.24 * s, 0);
+        wcone.rotation.z = -0.34;
+        g.add(wcone);
+        var wband = cyl(0.21 * s, 0.21 * s, 0.06 * s, 0xffd700, { suit: true });
+        wband.position.y = base + 0.04 * s;
+        g.add(wband);
+        var buckle = box2(0.08 * s, 0.07 * s, 0.03 * s, 0xffd700, { metalness: 0.85, roughness: 0.25 });
+        buckle.position.set(0, base + 0.04 * s, 0.2 * s);
+        g.add(buckle);
+        break;
+      }
+      case "chef": {
+        var band4 = cyl(0.29 * s, 0.3 * s, 0.1 * s, 0xf0f0f0, { suit: true, roughness: 0.9 });
+        band4.position.y = base + 0.04 * s;
+        g.add(band4);
+        [[0, 0.1], [-0.14, 0.04], [0.14, 0.04], [0, -0.12]].forEach(function (p) {
+          var puff = sphere(0.15 * s, 0xfafafa, { roughness: 0.95 }, 16);
+          puff.position.set(p[0] * s, base + 0.16 * s + p[1] * s, p[1] * 0.6 * s);
+          g.add(puff);
+        });
+        break;
+      }
+      case "beanie": {
+        var dome2 = hemi(0.32 * s, c, { suit: false, roughness: 0.95 });
+        dome2.position.y = base - 0.02 * s;
+        g.add(dome2);
+        var fold = torus(0.3 * s, 0.055 * s, c, { roughness: 0.95 });
+        fold.rotation.x = Math.PI / 2;
+        fold.position.y = base + 0.02 * s;
+        g.add(fold);
+        var ball = sphere(0.08 * s, 0xff5f7a, { roughness: 0.95 }, 14);
+        ball.position.y = base + 0.3 * s;
+        g.add(ball);
+        break;
+      }
+      case "headphones": {
+        var arc = new THREE.Mesh(
+          new THREE.TorusGeometry(0.32 * s, 0.035 * s, 8, 24, Math.PI),
+          mat(c, { suit: true })
+        );
+        arc.position.y = base;
+        g.add(arc);
+        [-1, 1].forEach(function (side) {
+          var cup = cyl(0.1 * s, 0.1 * s, 0.07 * s, c, { suit: true });
+          cup.rotation.z = Math.PI / 2;
+          cup.position.set(side * 0.31 * s, base - 0.02 * s, 0);
+          g.add(cup);
+          var pad = torus(0.085 * s, 0.03 * s, 0xff3b6b, { suit: true });
+          pad.rotation.y = Math.PI / 2;
+          pad.position.set(side * 0.34 * s, base - 0.02 * s, 0);
+          g.add(pad);
+        });
+        break;
+      }
+      case "ears": {
+        var band5 = torus(0.3 * s, 0.035 * s, 0xfff0f4, { roughness: 0.9 });
+        band5.rotation.x = Math.PI / 2;
+        band5.position.y = base;
+        g.add(band5);
+        [-1, 1].forEach(function (side) {
+          var ear = sphere(0.1 * s, c, { roughness: 0.9 }, 16);
+          ear.scale.set(0.55, 1.9, 0.4);
+          ear.position.set(side * 0.17 * s, base + 0.24 * s, 0);
+          ear.rotation.z = -side * 0.16;
+          g.add(ear);
+          var inner = sphere(0.055 * s, 0xff9fc0, { roughness: 0.9 }, 12);
+          inner.scale.set(0.5, 1.7, 0.3);
+          inner.position.set(side * 0.17 * s, base + 0.24 * s, 0.04 * s);
+          inner.rotation.z = -side * 0.16;
+          g.add(inner);
+        });
+        break;
+      }
+      case "horns": {
+        var band6 = torus(0.3 * s, 0.04 * s, c, { suit: true });
+        band6.rotation.x = Math.PI / 2;
+        band6.position.y = base;
+        g.add(band6);
+        [-1, 1].forEach(function (side) {
+          var horn2 = cone(0.08 * s, 0.3 * s, 0x8a1420, { roughness: 0.5 }, 12);
+          horn2.position.set(side * 0.22 * s, base + 0.14 * s, 0);
+          horn2.rotation.z = -side * 0.5;
+          g.add(horn2);
+        });
+        break;
+      }
+      case "racer": {
+        var shell = hemi(0.33 * s, c, { suit: true, metalness: 0.5, roughness: 0.25 });
+        shell.position.y = base - 0.03 * s;
+        g.add(shell);
+        var visor = sphere(0.2 * s, 0x101418, { metalness: 0.4, roughness: 0.1 }, 16);
+        visor.scale.set(1.05, 0.6, 0.7);
+        visor.position.set(0, base - 0.03 * s, 0.2 * s);
+        g.add(visor);
+        var stripe2 = box2(0.06 * s, 0.02 * s, 0.32 * s, 0xffffff, { suit: true });
+        stripe2.position.set(0, base + 0.16 * s, 0.06 * s);
+        g.add(stripe2);
+        break;
+      }
+      case "mariachi": {
+        var brim5 = cyl(0.72 * s, 0.76 * s, 0.03 * s, c, { suit: true, roughness: 0.9 });
+        brim5.position.y = base;
+        brim5.rotation.z = 0.05;
+        g.add(brim5);
+        var crown5 = cone(0.24 * s, 0.34 * s, c, { suit: true, roughness: 0.9 });
+        crown5.position.y = base + 0.17 * s;
+        g.add(crown5);
+        var trim5 = torus(0.245 * s, 0.03 * s, 0xffd700, { suit: true, metalness: 0.7 });
+        trim5.rotation.x = Math.PI / 2;
+        trim5.position.y = base + 0.03 * s;
+        g.add(trim5);
+        for (var m = 0; m < 8; m++) {
+          var dot = sphere(0.03 * s, 0xffd700, { emissive: 0xffd700, emissiveIntensity: 0.5 }, 8);
+          var ang = (m / 8) * Math.PI * 2;
+          dot.position.set(Math.cos(ang) * 0.6 * s, base + 0.01 * s, Math.sin(ang) * 0.6 * s);
+          g.add(dot);
+        }
+        break;
+      }
+      case "flower": {
+        var band7 = torus(0.3 * s, 0.04 * s, 0x2f8f3f, { roughness: 0.9 });
+        band7.rotation.x = Math.PI / 2;
+        band7.position.y = base;
+        g.add(band7);
+        for (var f = 0; f < 7; f++) {
+          var fa = (f / 7) * Math.PI * 2;
+          var petals = new THREE.Group();
+          for (var pi = 0; pi < 5; pi++) {
+            var pet = sphere(0.045 * s, f % 2 ? 0xff6fa8 : 0xffe14d, { roughness: 0.75 }, 10);
+            pet.scale.set(1, 0.5, 1);
+            pet.position.set(Math.cos((pi / 5) * Math.PI * 2) * 0.05 * s, 0, Math.sin((pi / 5) * Math.PI * 2) * 0.05 * s);
+            petals.add(pet);
+          }
+          petals.position.set(Math.cos(fa) * 0.29 * s, base + 0.03 * s, Math.sin(fa) * 0.29 * s);
+          g.add(petals);
+        }
+        break;
+      }
+      default: {
+        var plain = hemi(0.31 * s, c, { suit: true });
+        plain.position.y = base;
+        g.add(plain);
+      }
+    }
+
+    head.add(g);
+    return g;
+  }
+
+  /**
+   * CAPAS: se montan en el grupo raiz (mismo anclaje que la capa original).
+   * devolvemos el mesh animable para que game3d.js lo haga ondear.
+   */
+  function buildAccCape(group, s, def) {
+    var c = def.color;
+    var shape = def.shape;
+
+    // El pivote va en los hombros: asi game3d.js puede hacer ondear la capa
+    // rotando parts.cape igual que con la capa original del personaje.
+    var holder = new THREE.Group();
+    holder.position.set(0, 0.78 * s, -0.18 * s);
+    group.add(holder);
+
+    if (shape === "wings") {
+      [-1, 1].forEach(function (side) {
+        var geo = new THREE.PlaneGeometry(0.5 * s, 0.72 * s, 3, 3);
+        var pos = geo.attributes.position;
+        for (var i = 0; i < pos.count; i++) {
+          var y = pos.getY(i);
+          var t = (0.36 * s - y) / (0.72 * s);
+          // dientes de murcielago en el borde inferior
+          pos.setY(i, y - (Math.abs(pos.getX(i)) > 0.12 * s && t > 0.55 ? 0.16 * s : 0));
+          pos.setZ(i, -t * t * 0.26 * s);
+        }
+        geo.computeVertexNormals();
+        var wing = new THREE.Mesh(geo, mat(c, { suit: true, roughness: 0.7 }));
+        wing.material.side = THREE.DoubleSide;
+        wing.position.set(side * 0.24 * s, 0.02 * s, 0.02 * s);
+        wing.rotation.y = side * 0.34;
+        holder.add(wing);
+      });
+      return holder;
+    }
+
+    var long = shape === "long" || shape === "royal" || shape === "rainbow" || shape === "flag" || shape === "towel";
+    var width = shape === "ruana" ? 0.62 * s : long ? 0.44 * s : 0.52 * s;
+    var height = shape === "ruana" ? 0.52 * s : shape === "towel" ? 0.66 * s : 0.84 * s;
+    var flare = shape === "ruana" ? 0.55 : 0.35;
+
+    function cloth(color, yRel, h, w) {
+      var geo = new THREE.PlaneGeometry(w, h, 6, 8);
+      var pos = geo.attributes.position;
+      for (var i = 0; i < pos.count; i++) {
+        var y = pos.getY(i);
+        var t = (h / 2 - y) / h;
+        pos.setZ(i, -t * t * 0.32 * s);
+        pos.setX(i, pos.getX(i) * (1 + t * flare));
+      }
+      geo.computeVertexNormals();
+      var mesh = new THREE.Mesh(geo, mat(color, { suit: true, roughness: 0.75 }));
+      mesh.material.side = THREE.DoubleSide;
+      mesh.position.y = yRel;
+      holder.add(mesh);
+      return mesh;
+    }
+
+    var bands = null;
+    if (shape === "stripe" || shape === "rainbow" || shape === "flag") {
+      bands = shape === "rainbow"
+        ? [0xff3b3b, 0xff9f1c, 0xffe14d, 0x3fd07a, 0x3aa0ff, 0x9b5cff]
+        : shape === "flag"
+          ? [0xffffff, 0xff3b6b, 0x2244cc]
+          : [0xffe14d, 0xffffff, 0x2fbf9f, 0xff8a3d];
+    }
+
+    if (bands) {
+      var seg = height / bands.length;
+      bands.forEach(function (col, i) {
+        cloth(col, -height / 2 + seg * (i + 0.5), seg * 1.04, width);
+      });
+    } else {
+      cloth(c, 0, height, width);
+    }
+
+    if (shape === "royal") {
+      var fur = torus(0.24 * s, 0.075 * s, 0xfafafa, { roughness: 0.98 });
+      fur.rotation.x = Math.PI / 2;
+      fur.position.set(0, 0.34 * s, 0.16 * s);
+      holder.add(fur);
+    }
+
+    if (shape === "hood") {
+      var hood = hemi(0.3 * s, c, { suit: true, roughness: 0.85 });
+      hood.position.set(0, 0.4 * s, 0.08 * s);
+      hood.rotation.x = -0.5;
+      holder.add(hood);
+    }
+
+    if (shape === "ruana") {
+      // cuello tejido: se ve por delante tambien
+      var collar = torus(0.23 * s, 0.07 * s, c, { suit: true, roughness: 0.95 });
+      collar.rotation.x = Math.PI / 2;
+      collar.position.set(0, 0.28 * s, 0.18 * s);
+      holder.add(collar);
+    }
+
+    return holder;
+  }
+
+  /**
+   * ROPA CHISTOSA: recolorear ya se hizo al construir el cuerpo; aqui solo
+   * añadimos los detalles que la hacen reconocible.
+   */
+  function applyOutfitExtras(group, torso, s, def) {
+    var c = def.color;
+    var extra = def.extra;
+
+    switch (extra) {
+      case "collar": {
+        // volante de plumas del pollo
+        for (var i = 0; i < 12; i++) {
+          var a = (i / 12) * Math.PI * 2;
+          var plume = sphere(0.075 * s, i % 2 ? 0xffffff : 0xfff0d0, { roughness: 0.9 }, 10);
+          plume.scale.set(1, 0.7, 1);
+          plume.position.set(Math.cos(a) * 0.24 * s, 0.44 * s, Math.sin(a) * 0.2 * s);
+          torso.add(plume);
+        }
+        break;
+      }
+      case "buttons": {
+        for (var b = 0; b < 3; b++) {
+          var btn = sphere(0.055 * s, b % 2 ? 0xffe14d : 0x36e0a0, { roughness: 0.4 }, 12);
+          btn.position.set(0, 0.32 * s - b * 0.11 * s, 0.2 * s);
+          torso.add(btn);
+        }
+        var ruff = torus(0.2 * s, 0.06 * s, 0xffffff, { suit: true });
+        ruff.rotation.x = Math.PI / 2;
+        ruff.position.y = 0.45 * s;
+        torso.add(ruff);
+        break;
+      }
+      case "spikes": {
+        // dorsales del dinosaurio por la espalda
+        for (var d = 0; d < 5; d++) {
+          var sp2 = cone(0.055 * s, 0.16 * s, def.trimColor || 0x9be15d, { suit: true, roughness: 0.6 }, 4);
+          sp2.position.set(0, 0.42 * s - d * 0.1 * s, -0.16 * s - d * 0.01 * s);
+          sp2.rotation.x = -0.4;
+          torso.add(sp2);
+        }
+        var tail = cone(0.11 * s, 0.42 * s, c, { suit: true });
+        tail.rotation.x = Math.PI / 2 + 0.35;
+        tail.position.set(0, 0.06 * s, -0.3 * s);
+        torso.add(tail);
+        break;
+      }
+      case "stripes": {
+        var col = def.trimColor || 0x1c1c1c;
+        for (var t2 = 0; t2 < 4; t2++) {
+          var ring = torus(0.2 * s, 0.028 * s, col, { suit: true });
+          ring.rotation.x = Math.PI / 2;
+          ring.position.y = 0.1 * s + t2 * 0.1 * s;
+          ring.scale.set(1, 1, 0.86);
+          torso.add(ring);
+        }
+        break;
+      }
+      case "rainbow": {
+        var rainbow = [0xff3b3b, 0xff9f1c, 0xffe14d, 0x3fd07a, 0x3aa0ff, 0x9b5cff];
+        rainbow.forEach(function (col2, i2) {
+          var band = torus(0.198 * s, 0.035 * s, col2, { suit: true, emissive: col2, emissiveIntensity: 0.25 });
+          band.rotation.x = Math.PI / 2;
+          band.position.y = 0.08 * s + i2 * 0.07 * s;
+          band.scale.set(1, 1, 0.86);
+          torso.add(band);
+        });
+        break;
+      }
+      case "tie": {
+        var knot = box2(0.07 * s, 0.06 * s, 0.04 * s, 0xd02030, { roughness: 0.5 });
+        knot.position.set(0, 0.38 * s, 0.2 * s);
+        torso.add(knot);
+        var tieBody = cone(0.07 * s, 0.26 * s, 0xd02030, { roughness: 0.5 }, 4);
+        tieBody.rotation.x = Math.PI;
+        tieBody.position.set(0, 0.24 * s, 0.2 * s);
+        torso.add(tieBody);
+        var pocket = box2(0.08 * s, 0.05 * s, 0.02 * s, 0xffffff, { roughness: 0.7 });
+        pocket.position.set(0.12 * s, 0.3 * s, 0.19 * s);
+        torso.add(pocket);
+        break;
+      }
+      case "beltbig": {
+        var mawashi = cyl(0.235 * s, 0.245 * s, 0.18 * s, 0xffffff, { suit: true, roughness: 0.9 });
+        mawashi.position.y = 0.1 * s;
+        torso.add(mawashi);
+        var knot2 = sphere(0.07 * s, def.trimColor || 0xdd2244, { roughness: 0.6 }, 12);
+        knot2.position.set(0, 0.2 * s, 0.22 * s);
+        torso.add(knot2);
+        break;
+      }
+      case "horn": {
+        var uni = cone(0.055 * s, 0.26 * s, 0xffd700, { metalness: 0.7, roughness: 0.25, emissive: 0xffd700, emissiveIntensity: 0.3 }, 10);
+        uni.position.set(0, 0.3 * s, 0.19 * s);
+        uni.rotation.x = -0.25;
+        torso.add(uni);
+        var mane = sphere(0.12 * s, def.trimColor || 0xa86bff, { roughness: 0.85 });
+        mane.scale.set(0.5, 1.4, 0.4);
+        mane.position.set(0, 0.34 * s, -0.2 * s);
+        torso.add(mane);
+        break;
+      }
+      case "tail": {
+        var peel = cone(0.1 * s, 0.3 * s, def.trimColor || 0x6b4a12, { roughness: 0.8 }, 8);
+        peel.rotation.x = Math.PI / 2 - 0.5;
+        peel.position.set(0, 0.1 * s, -0.26 * s);
+        torso.add(peel);
+        break;
+      }
+      default:
+        break;
+    }
+    return group;
+  }
+
+  /**
+   * CARA: gafas, bigotes, narices y caretas. Se montan en headShape, por
+   * delante de los ojos (z > 0.24*s).
+   */
+  function buildFaceAcc(head, s, def, heroAccent) {
+    var g = new THREE.Group();
+    var c = def.color;
+
+    switch (def.shape) {
+      case "shades": {
+        [-1, 1].forEach(function (side) {
+          var lens = sphere(0.11 * s, 0x101014, { metalness: 0.5, roughness: 0.1 }, 16);
+          lens.scale.set(1, 0.78, 0.35);
+          lens.position.set(side * 0.12 * s, 0.03 * s, 0.27 * s);
+          g.add(lens);
+          var arm = box2(0.1 * s, 0.022 * s, 0.022 * s, 0x101014, { suit: true });
+          arm.position.set(side * 0.24 * s, 0.05 * s, 0.16 * s);
+          arm.rotation.y = -side * 0.5;
+          g.add(arm);
+        });
+        var bridge = box2(0.07 * s, 0.022 * s, 0.022 * s, 0x101014, { suit: true });
+        bridge.position.set(0, 0.05 * s, 0.29 * s);
+        g.add(bridge);
+        break;
+      }
+      case "nerd": {
+        [-1, 1].forEach(function (side) {
+          var frame = torus(0.1 * s, 0.018 * s, 0x1a1a1a, { suit: true });
+          frame.position.set(side * 0.12 * s, 0.03 * s, 0.27 * s);
+          g.add(frame);
+        });
+        var bridge2 = box2(0.06 * s, 0.02 * s, 0.02 * s, 0x1a1a1a, { suit: true });
+        bridge2.position.set(0, 0.04 * s, 0.28 * s);
+        g.add(bridge2);
+        [-1, 1].forEach(function (side) {
+          var arm2 = box2(0.1 * s, 0.02 * s, 0.02 * s, 0x1a1a1a, { suit: true });
+          arm2.position.set(side * 0.24 * s, 0.05 * s, 0.16 * s);
+          arm2.rotation.y = -side * 0.5;
+          g.add(arm2);
+        });
+        break;
+      }
+      case "mustache": {
+        [-1, 1].forEach(function (side) {
+          var half = sphere(0.085 * s, c, { roughness: 0.95 }, 14);
+          half.scale.set(1.1, 0.5, 0.55);
+          half.position.set(side * 0.075 * s, -0.11 * s, 0.25 * s);
+          half.rotation.z = side * 0.3;
+          g.add(half);
+        });
+        break;
+      }
+      case "disguise": {
+        [-1, 1].forEach(function (side) {
+          var lens2 = torus(0.095 * s, 0.028 * s, 0x2a2a2a, { suit: true });
+          lens2.position.set(side * 0.12 * s, 0.04 * s, 0.27 * s);
+          g.add(lens2);
+          var half2 = sphere(0.09 * s, c, { roughness: 0.95 }, 14);
+          half2.scale.set(1.1, 0.5, 0.55);
+          half2.position.set(side * 0.08 * s, -0.11 * s, 0.25 * s);
+          half2.rotation.z = side * 0.3;
+          g.add(half2);
+        });
+        var bridge3 = box2(0.05 * s, 0.03 * s, 0.03 * s, 0x2a2a2a, { suit: true });
+        bridge3.position.set(0, 0.05 * s, 0.28 * s);
+        g.add(bridge3);
+        var nose2 = sphere(0.07 * s, 0xd8a07a, { roughness: 0.8 }, 14);
+        nose2.position.set(0, -0.05 * s, 0.3 * s);
+        g.add(nose2);
+        break;
+      }
+      case "clownnose": {
+        var ball = sphere(0.085 * s, c, { emissive: c, emissiveIntensity: 0.35, roughness: 0.3 }, 16);
+        ball.position.set(0, -0.03 * s, 0.31 * s);
+        g.add(ball);
+        break;
+      }
+      case "santa": {
+        var beard = sphere(0.24 * s, c, { roughness: 1 }, 18);
+        beard.scale.set(1.05, 1.1, 0.7);
+        beard.position.set(0, -0.16 * s, 0.16 * s);
+        g.add(beard);
+        var mous = sphere(0.1 * s, 0xffffff, { roughness: 1 }, 14);
+        mous.scale.set(1.3, 0.45, 0.5);
+        mous.position.set(0, -0.08 * s, 0.27 * s);
+        g.add(mous);
+        break;
+      }
+      case "mask": {
+        var bandMask = sphere(0.305 * s, c, { suit: true, roughness: 0.55 }, 20);
+        bandMask.scale.set(1.01, 0.34, 1.01);
+        bandMask.position.y = 0.03 * s;
+        g.add(bandMask);
+        [-1, 1].forEach(function (side) {
+          var hole = sphere(0.075 * s, 0xffffff, { emissive: 0xffffff, emissiveIntensity: 0.5 }, 12);
+          hole.scale.set(1, 0.75, 0.4);
+          hole.position.set(side * 0.1 * s, 0.04 * s, 0.29 * s);
+          g.add(hole);
+        });
+        break;
+      }
+      case "cat": {
+        [-1, 1].forEach(function (side) {
+          for (var w = 0; w < 3; w++) {
+            var whisk = capsule(0.008 * s, 0.16 * s, 0xffffff, { roughness: 0.9 });
+            whisk.rotation.z = Math.PI / 2;
+            whisk.rotation.y = side * (0.25 + w * 0.22);
+            whisk.position.set(side * 0.19 * s, -0.06 * s - w * 0.03 * s, 0.24 * s);
+            g.add(whisk);
+          }
+        });
+        var nose3 = sphere(0.045 * s, c, { roughness: 0.5 }, 12);
+        nose3.scale.set(1.2, 0.8, 0.8);
+        nose3.position.set(0, -0.05 * s, 0.3 * s);
+        g.add(nose3);
+        break;
+      }
+      case "beak": {
+        var upper = cone(0.085 * s, 0.16 * s, c, { roughness: 0.5 }, 12);
+        upper.rotation.x = Math.PI / 2;
+        upper.position.set(0, -0.04 * s, 0.32 * s);
+        g.add(upper);
+        var lower = cone(0.07 * s, 0.1 * s, 0xe08f10, { roughness: 0.5 }, 12);
+        lower.rotation.x = -Math.PI / 2;
+        lower.position.set(0, -0.1 * s, 0.3 * s);
+        g.add(lower);
+        break;
+      }
+      default:
+        break;
+    }
+
+    head.add(g);
+    return g;
   }
 
   /* ------------------------------------------------------------------ *
@@ -944,9 +1611,11 @@
         break;
       }
       case "loki": {
-        // Capa verde
-        var capeL = buildCape(group, 0x1f6f3f, s);
-        parts.cape = capeL;
+        // Capa verde (solo si el jugador no ha elegido otra capa)
+        if (!parts.cape) {
+          var capeL = buildCape(group, 0x1f6f3f, s);
+          parts.cape = capeL;
+        }
         break;
       }
       default:

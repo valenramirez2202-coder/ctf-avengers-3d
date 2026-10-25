@@ -27,7 +27,10 @@
     netAcc: 0,
     inputAcc: 0,
     killFeed: [],
-    stats: { shots: 0, time: 0 }
+    stats: { shots: 0, time: 0 },
+    accTab: "hat",
+    accOpen: false,
+    lastMode: "bot"
   };
 
   var canvas3d = el("game3d");
@@ -49,15 +52,146 @@
     el("gameContainer").style.display = "none";
     el("mainButtons").style.display = "block";
     el("charSection").style.display = "none";
+    el("accSection").style.display = "none";
     el("mapSection").style.display = "none";
     el("joinSection").style.display = "none";
     el("botSection").style.display = "none";
     el("waitingSection").style.display = "none";
     el("endScreen").style.display = "none";
+    state.accOpen = false;
+    var tog = el("btnToggleAcc");
+    if (tog) tog.textContent = ACC_TOGGLE_OPEN;
+    if (window.Preview3D) Preview3D.stop();
     var conf = el("btnConfirmHost");
     if (conf) conf.remove();
     stopGame();
     status("");
+  }
+
+  var ACC_TOGGLE_OPEN = "🎨 Personaliza tu aspecto (accesorios gratis)";
+  var ACC_TOGGLE_CLOSE = "✖ Cerrar accesorios";
+
+  /* ------------------------------------------------------------------ *
+   * Accesorios (todo gratuito)
+   * ------------------------------------------------------------------ */
+
+  function buildAccTabs() {
+    var box = el("accTabs");
+    box.innerHTML = "";
+    Acc.CATS.forEach(function (cat) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "acc-tab" + (cat.id === state.accTab ? " active" : "");
+      b.textContent = cat.emoji + " " + cat.name;
+      b.onclick = function () {
+        state.accTab = cat.id;
+        buildAccTabs();
+        buildAccGrid();
+        SFX.beep();
+      };
+      box.appendChild(b);
+    });
+  }
+
+  function buildAccGrid() {
+    var grid = el("accGrid");
+    grid.innerHTML = "";
+    var selected = Acc.get(state.accTab);
+    var cat = null;
+    Acc.CATS.forEach(function (c) {
+      if (c.id === state.accTab) cat = c;
+    });
+
+    function makeCard(def) {
+      var card = document.createElement("div");
+      var isNone = !def;
+      card.className = "acc-card" + (isNone ? " none" : "") + ((isNone ? !selected : selected === def.id) ? " selected" : "");
+      card.title = isNone ? "Quitar el accesorio de esta categoría" : def.name + " · " + def.desc;
+
+      var em = document.createElement("span");
+      em.className = "acc-emoji";
+      em.textContent = isNone ? "🚫" : def.emoji;
+      card.appendChild(em);
+
+      var nm = document.createElement("div");
+      nm.className = "acc-name";
+      nm.textContent = isNone ? "Ninguno" : def.name;
+      card.appendChild(nm);
+
+      if (!isNone) {
+        var ds = document.createElement("div");
+        ds.className = "acc-desc";
+        ds.textContent = def.desc;
+        card.appendChild(ds);
+        var tag = document.createElement("span");
+        tag.className = "acc-free";
+        tag.textContent = "GRATIS";
+        card.appendChild(tag);
+      }
+
+      card.onclick = function () {
+        var current = Acc.get(state.accTab);
+        var next = isNone ? null : def.id;
+        if (current === next) next = null;
+        Acc.set(state.accTab, next);
+        buildAccGrid();
+        buildCharGrid();
+        updateAccPreview();
+        pushAccToServer();
+        try { SFX.beep(); } catch (e) { /* audio bloqueado */ }
+      };
+      return card;
+    }
+
+    grid.appendChild(makeCard(null));
+    Acc.list(state.accTab).forEach(function (def) {
+      grid.appendChild(makeCard(def));
+    });
+
+    el("accHint").textContent = cat
+      ? cat.hint + " · Todo gratuito, sin monedas ni niveles."
+      : "Todos los accesorios son gratuitos.";
+  }
+
+  function updateAccPreview() {
+    var acc = Acc.equipped();
+    if (window.Preview3D && Preview3D.isReady()) {
+      Preview3D.set(state.charId, acc);
+      Preview3D.resize();
+    }
+    var line = Acc.emojiLine(acc);
+    var note = el("accPreviewNote");
+    if (note) {
+      note.textContent = line
+        ? "Llevas: " + line + " · " + (CHARACTERS.filter(function (c) { return c.id === state.charId; })[0] || {}).name
+        : "Sin accesorios todavía";
+    }
+  }
+
+  function toggleAccSection() {
+    state.accOpen = !state.accOpen;
+    el("accSection").style.display = state.accOpen ? "block" : "none";
+    var btn = el("btnToggleAcc");
+    if (btn) btn.textContent = state.accOpen ? ACC_TOGGLE_CLOSE : ACC_TOGGLE_OPEN;
+    if (!state.accOpen) {
+      if (window.Preview3D) Preview3D.stop();
+      return;
+    }
+    buildAccTabs();
+    buildAccGrid();
+    var cv = el("accPreview");
+    if (window.Preview3D && Preview3D.init(cv)) {
+      updateAccPreview();
+      Preview3D.resize();
+      Preview3D.start();
+    } else {
+      el("accPreviewNote").textContent = "Vista previa 3D no disponible en este navegador.";
+    }
+  }
+
+  /** En sala: el rival ve los accesorios que acabas de poner. */
+  function pushAccToServer() {
+    if (Net.isOnline() && Net.code) Net.setChar(state.charId, Acc.equipped());
   }
 
   function buildCharGrid() {
@@ -69,11 +203,12 @@
         spriteMap[s.id] = s.url;
       });
     }
+    var accLine = Acc.emojiLine();
 
     CHARACTERS.forEach(function (c) {
       var card = document.createElement("div");
       card.className = "char-card" + (c.id === state.charId ? " selected" : "") + (c.skin3d ? " skin" : "");
-      card.title = c.name + " · " + (CLASSES[c.klass] || CLASSES.sniper).name;
+      card.title = c.name + " · " + (CLASSES[c.klass] || CLASSES.sniper).name + (accLine ? " · " + accLine : "");
 
       var url = spriteMap[c.id];
       if (url) {
@@ -96,6 +231,13 @@
         card.appendChild(badge);
       }
 
+      if (accLine && c.id === state.charId) {
+        var accBadge = document.createElement("div");
+        accBadge.className = "char-badge-acc";
+        accBadge.textContent = accLine;
+        card.appendChild(accBadge);
+      }
+
       var name = document.createElement("div");
       name.className = "char-name";
       name.textContent = c.name;
@@ -108,7 +250,9 @@
         });
         card.classList.add("selected");
         SFX.beep();
-        if (Net.isOnline() && Net.code) Net.setChar(c.id);
+        saveIdentity();
+        if (window.Preview3D && Preview3D.isReady()) updateAccPreview();
+        if (Net.isOnline() && Net.code) Net.setChar(c.id, Acc.equipped());
       };
       grid.appendChild(card);
     });
@@ -123,12 +267,16 @@
   function startGameFlow(opts) {
     el("menu").style.display = "none";
     el("charSection").style.display = "none";
+    el("accSection").style.display = "none";
     el("mapSection").style.display = "none";
     el("joinSection").style.display = "none";
     el("botSection").style.display = "none";
     el("waitingSection").style.display = "none";
     el("gameContainer").style.display = "block";
     el("endScreen").style.display = "none";
+    state.accOpen = false;
+    state.lastMode = opts.mode || state.lastMode;
+    if (window.Preview3D) Preview3D.stop();
 
     applyGfxMode(state.gfx);
     if (state.gfx === "3d") View3D.resize();
@@ -144,9 +292,9 @@
     var local = Game.localTeam;
     var remote = local === "red" ? "blue" : "red";
     Game.players[local].name = opts.localName || state.username;
-    Game.setLocalPlayer(local, opts.localName || state.username, opts.localChar || state.charId);
+    Game.setLocalPlayer(local, opts.localName || state.username, opts.localChar || state.charId, opts.localAcc || Acc.equipped());
     Game.players[remote].name = opts.remoteName || "Rival";
-    Game.setRemotePlayer(remote, opts.remoteName || "Rival", opts.remoteChar || (local === "red" ? "cap" : "ironman"));
+    Game.setRemotePlayer(remote, opts.remoteName || "Rival", opts.remoteChar || (local === "red" ? "cap" : "ironman"), opts.remoteAcc || null);
 
     if (state.gfx === "3d") View3D.rebuildAll();
     buildStanceUI();
@@ -430,6 +578,7 @@
             type: "input",
             keys: readKeys(),
             aim: Math.round(state.input.aim * 100) / 100,
+            yaw: Math.round((View3D.getCamYaw ? View3D.getCamYaw() : state.input.aim) * 100) / 100,
             powers: {
               q: state.input.powers.q,
               e: state.input.powers.e,
@@ -688,6 +837,11 @@
       ctx2d.textAlign = "center";
       ctx2d.fillStyle = team === "red" ? "#ff99aa" : "#99ccff";
       ctx2d.fillText(p.name, p.x, p.y - 34);
+      var accLine2d = window.Acc ? Acc.emojiLine(p.acc) : "";
+      if (accLine2d) {
+        ctx2d.font = "11px sans-serif";
+        ctx2d.fillText(accLine2d, p.x, p.y - 47);
+      }
     });
 
     ctx2d.restore();
@@ -697,10 +851,29 @@
    * Arranque de UI
    * ------------------------------------------------------------------ */
 
+  function saveIdentity() {
+    try {
+      localStorage.setItem("ctf3d.username", state.username);
+      localStorage.setItem("ctf3d.charId", state.charId);
+    } catch (e) {
+      /* modo privado */
+    }
+  }
+
   function bindMenu() {
     el("username").addEventListener("input", function () {
       state.username = el("username").value.trim() || "Jugador";
+      saveIdentity();
     });
+
+    if (el("btnToggleAcc")) {
+      el("btnToggleAcc").onclick = function () {
+        // primero la interfaz, luego el sonido: si el audio falla el panel
+        // tiene que abrirse igualmente.
+        toggleAccSection();
+        try { SFX.beep(); } catch (e) { /* audio bloqueado */ }
+      };
+    }
 
     el("btnCreate").onclick = function () {
       SFX.unlock();
@@ -739,7 +912,7 @@
     };
     el("btnDoJoin").onclick = function () {
       var code = el("roomCode").value.trim().toUpperCase().replace(/\s+/g, "");
-      if (code.length < 4) {
+      if (code.length !== 5) {
         status("El código tiene 5 letras.", "error");
         return;
       }
@@ -750,7 +923,12 @@
       startBot();
     };
     el("btnReplay").onclick = function () {
-      startBot();
+      if (state.lastMode === "bot") {
+        startBot();
+      } else {
+        endToMenu();
+        status("Crea o únete a una sala nueva para jugar otra vez.", "ok");
+      }
     };
     el("btnMenu").onclick = endToMenu;
     el("btnQuit").onclick = endToMenu;
@@ -841,18 +1019,20 @@
   function startHost() {
     state.username = el("username").value.trim() || "Jugador";
     state.mapId = el("mapSelect").value;
+    saveIdentity();
     status("Creando sala...");
     Net.onEvent = onNetEvent;
-    Net.host(state.username, state.charId, state.mapId);
+    Net.host(state.username, state.charId, state.mapId, Acc.equipped());
     var conf = el("btnConfirmHost");
     if (conf) conf.remove();
   }
 
   function joinRoom(code) {
     state.username = el("username").value.trim() || "Jugador";
+    saveIdentity();
     status("Conectando a la sala " + code + "...");
     Net.onEvent = onNetEvent;
-    Net.join(code, state.username, state.charId);
+    Net.join(code, state.username, state.charId, Acc.equipped());
   }
 
   function onNetEvent(type, payload) {
@@ -875,15 +1055,21 @@
         status("Sala " + payload.code + " lista. Comparte el código.", "ok");
         el("mainButtons").style.display = "none";
         el("charSection").style.display = "none";
+        el("accSection").style.display = "none";
+        state.accOpen = false;
         el("mapSection").style.display = "none";
         el("waitingSection").style.display = "block";
         el("roomInfo").textContent = payload.code;
+        updateWaiting(null, null);
         break;
       case "joining":
         status("Sala encontrada. Uniéndose...");
         break;
       case "joined":
         status("Dentro de la sala de " + payload.room.host.name + ". Esperando al anfitrión...", "ok");
+        updateWaiting(payload.room.guest, payload.room);
+        break;
+      case "room_update":
         updateWaiting(null, payload.room);
         break;
       case "guest_joined":
@@ -922,8 +1108,31 @@
     }
   }
 
-  function updateWaiting() {
-    // reservado para mostrar el estado de la sala mientras esperas
+  /**
+   * Mientras esperas en la sala: qué lleva el rival (personaje + accesorios).
+   * `rival` puede venir explícito o deducirse de room/role.
+   */
+  function updateWaiting(rival, room) {
+    var box = el("waitingRival");
+    if (!box) return;
+    var r = rival;
+    if (!r && room) r = Net.role === "host" ? room.guest : room.host;
+    if (!r) {
+      box.innerHTML = '<span class="wait-dot">●</span> Esperando a que alguien se una…';
+      return;
+    }
+    var ch = null;
+    CHARACTERS.forEach(function (c) {
+      if (c.id === r.charId) ch = c;
+    });
+    var line = Acc.emojiLine(r.acc);
+    box.innerHTML = "";
+    var t = document.createElement("b");
+    t.textContent = (r.name || "Rival") + " ";
+    box.appendChild(t);
+    var s = document.createElement("span");
+    s.textContent = "· " + (ch ? ch.name : "personaje") + (line ? " " + line : "") + " · ¡listo!";
+    box.appendChild(s);
   }
 
   function startOnlineMatch(msg) {
@@ -938,8 +1147,10 @@
       localTeam: myTeam,
       localName: msg.players[myTeam].name,
       localChar: msg.players[myTeam].charId,
+      localAcc: msg.players[myTeam].acc || Acc.equipped(),
       remoteName: msg.players[rivalTeam].name,
-      remoteChar: msg.players[rivalTeam].charId
+      remoteChar: msg.players[rivalTeam].charId,
+      remoteAcc: msg.players[rivalTeam].acc || null
     });
     addFeed("Partida online · " + (isHost ? "eres el anfitrión" : "eres el invitado"), "gold");
   }
@@ -949,7 +1160,12 @@
     if (data.type === "state" && Net.role === "guest") {
       Game.applyState(data.state, 1 / 30);
     } else if (data.type === "input" && Net.role === "host") {
-      state.remoteInput = { keys: data.keys || {}, aim: data.aim, powers: data.powers || {} };
+      state.remoteInput = {
+        keys: data.keys || {},
+        aim: data.aim,
+        yaw: typeof data.yaw === "number" ? data.yaw : data.aim,
+        powers: data.powers || {}
+      };
     }
   }
 
@@ -960,6 +1176,7 @@
   function startBot() {
     state.username = el("username").value.trim() || "Jugador";
     state.mapId = el("mapSelect") ? el("mapSelect").value : state.mapId;
+    saveIdentity();
     var botChar;
     do {
       botChar = CHARACTERS[Math.floor(Math.random() * CHARACTERS.length)].id;
@@ -971,8 +1188,11 @@
       localTeam: "red",
       localName: state.username,
       localChar: state.charId,
+      localAcc: Acc.equipped(),
       remoteName: "Bot " + dname,
-      remoteChar: botChar
+      remoteChar: botChar,
+      // el bot tambien se pone algun accesorio para que la partida pinte mas
+      remoteAcc: Acc.random(0.75)
     });
   }
 
@@ -982,6 +1202,15 @@
 
   function loadSettings() {
     try {
+      var u = localStorage.getItem("ctf3d.username");
+      if (u) {
+        state.username = u;
+        el("username").value = u;
+      }
+      var ci = localStorage.getItem("ctf3d.charId");
+      if (ci && CHARACTERS.some(function (c) { return c.id === ci; })) {
+        state.charId = ci;
+      }
       var q = localStorage.getItem("ctf3d.quality");
       if (q) {
         state.quality = q;
@@ -1012,9 +1241,18 @@
 
   function boot() {
     el("loaderNote").textContent = "Preparando personajes…";
+    try {
+      Acc.load();
+    } catch (e) {
+      /* sin localStorage seguimos con todo por defecto */
+    }
     loadSettings();
     SFX.setVolume(state.volume);
     bindMenu();
+
+    window.addEventListener("resize", function () {
+      if (state.accOpen && window.Preview3D && Preview3D.isReady()) Preview3D.resize();
+    });
 
     if (typeof THREE === "undefined") {
       el("loaderNote").textContent = "No se pudo cargar Three.js: se usará el modo 2D. (¿Sin Internet?)";

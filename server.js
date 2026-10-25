@@ -306,8 +306,8 @@ function publicRoomInfo(room) {
   return {
     code: room.code,
     mapId: room.mapId,
-    host: room.host ? { name: room.host.meta.name, charId: room.host.meta.charId } : null,
-    guest: room.guest ? { name: room.guest.meta.name, charId: room.guest.meta.charId } : null,
+    host: room.host ? { name: room.host.meta.name, charId: room.host.meta.charId, acc: room.host.meta.acc || null } : null,
+    guest: room.guest ? { name: room.guest.meta.name, charId: room.guest.meta.charId, acc: room.guest.meta.acc || null } : null,
     playing: !!(room.host && room.guest)
   };
 }
@@ -375,6 +375,7 @@ function handleMessage(ws, raw) {
         team: "red",
         name: clean(msg.name, "Jugador"),
         charId: clean(msg.charId, "ironman"),
+        acc: cleanAcc(msg.acc),
         mapId: clean(msg.mapId, "classic")
       };
       rooms[code] = {
@@ -406,12 +407,16 @@ function handleMessage(ws, raw) {
         team: "blue",
         name: clean(msg.name, "Jugador2"),
         charId: clean(msg.charId, "cap"),
+        acc: cleanAcc(msg.acc),
         mapId: room.mapId
       };
       room.guest = ws;
       room.emptySince = null;
       send(ws, { type: "joined", room: publicRoomInfo(room) });
-      send(room.host, { type: "guest_joined", guest: { name: ws.meta.name, charId: ws.meta.charId } });
+      send(room.host, {
+        type: "guest_joined",
+        guest: { name: ws.meta.name, charId: ws.meta.charId, acc: ws.meta.acc || null }
+      });
       break;
     }
 
@@ -419,6 +424,7 @@ function handleMessage(ws, raw) {
       const room = rooms[ws.meta && ws.meta.code];
       if (!room || !ws.meta) return;
       ws.meta.charId = clean(msg.charId, ws.meta.charId);
+      if (msg.acc !== undefined) ws.meta.acc = cleanAcc(msg.acc);
       broadcast(room, { type: "room_update", room: publicRoomInfo(room) });
       break;
     }
@@ -435,8 +441,8 @@ function handleMessage(ws, raw) {
         mapId: room.mapId,
         seed: crypto.randomInt(1, 1e9),
         players: {
-          red: { name: room.host.meta.name, charId: room.host.meta.charId },
-          blue: { name: room.guest.meta.name, charId: room.guest.meta.charId }
+          red: { name: room.host.meta.name, charId: room.host.meta.charId, acc: room.host.meta.acc || null },
+          blue: { name: room.guest.meta.name, charId: room.guest.meta.charId, acc: room.guest.meta.acc || null }
         }
       };
       send(room.host, startMsg);
@@ -469,6 +475,25 @@ function clean(value, fallback) {
   if (typeof value !== "string") return fallback;
   const trimmed = value.trim().slice(0, 18).replace(/[<>]/g, "");
   return trimmed || fallback;
+}
+
+/**
+ * Accesorios gratuitos del jugador. Solo pasamos identificadores simples;
+ * el cliente valida ademas que existan realmente en su catalogo.
+ */
+const ACC_SLOTS = ["hat", "cape", "outfit", "face"];
+function cleanAcc(value) {
+  if (!value || typeof value !== "object") return null;
+  const out = {};
+  let any = false;
+  for (const slot of ACC_SLOTS) {
+    const v = value[slot];
+    if (typeof v === "string" && /^[a-z0-9_]{1,40}$/.test(v)) {
+      out[slot] = v;
+      any = true;
+    }
+  }
+  return any ? out : null;
 }
 
 /* Limpieza de salas vacias */

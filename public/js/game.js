@@ -42,6 +42,7 @@
       team: team,
       name: team === "red" ? "Rojo" : "Azul",
       charId: team === "red" ? "ironman" : "cap",
+      acc: null, // accesorios gratuitos { hat, cape, outfit, face }
       klass: klass.id,
       x: home.x,
       y: home.y,
@@ -880,8 +881,11 @@
    * Movimiento relativo a la camara: W = adelante (hacia donde mira la
    * camara/raton), A = atras, Q = izquierda, E = derecha. Las flechas hacen
    * lo mismo. La camara NUNCA gira con el teclado; solo el raton la rota.
+   *
+   * `ang` es el angulo de desplazamiento (yaw de la camara del jugador que
+   * manda las teclas). `aim` (si viene) es hacia donde apunta/dispara.
    */
-  function updateLocalHuman(p, dt, keys, aim) {
+  function moveHuman(p, dt, keys, ang, aim) {
     var fwd = 0;
     var strafe = 0;
     if (keys.w || keys.arrowup) fwd += 1;
@@ -889,13 +893,6 @@
     if (keys.q || keys.arrowleft) strafe -= 1;
     if (keys.e || keys.arrowright) strafe += 1;
 
-    // La direccion de avance es la de la CAMARA, no la del raton. Asi al
-    // pulsar W el heroe avanza exactamente hacia donde mira la pantalla y no
-    // se "corra" de lado aunque el raton este en otro punto.
-    var ang = (aim !== undefined && aim !== null) ? aim : (p.aim || 0);
-    var camYaw = (typeof window !== "undefined" && window.View3D && View3D.getCamYaw)
-      ? View3D.getCamYaw() : null;
-    if (camYaw !== null && camYaw !== undefined) ang = camYaw;
     var fx = Math.cos(ang);
     var fy = Math.sin(ang);
     var rx = -fy;
@@ -922,6 +919,17 @@
       p.facingX = fx;
       p.facingY = fy;
     }
+  }
+
+  function updateLocalHuman(p, dt, keys, aim) {
+    // La direccion de avance es la de la CAMARA, no la del raton. Asi al
+    // pulsar W el heroe avanza exactamente hacia donde mira la pantalla y no
+    // se "corra" de lado aunque el raton este en otro punto.
+    var ang = aim !== undefined && aim !== null ? aim : p.aim || 0;
+    var camYaw = (typeof window !== "undefined" && window.View3D && View3D.getCamYaw)
+      ? View3D.getCamYaw() : null;
+    if (camYaw !== null && camYaw !== undefined) ang = camYaw;
+    moveHuman(p, dt, keys, ang, aim);
   }
 
   Game.updateInput = function (input, dt) {
@@ -969,19 +977,12 @@
       if (localInput.powers.f) useAbility(localP);
     }
 
+    // El invitado manda W/A/Q/E (mismas teclas que aqui) y el yaw de SU
+    // camara: hay que moverlo con su angulo, no con los ejes del mundo.
     var rk = remoteInput.keys || {};
-    var rax = 0;
-    var ray = 0;
-    if (rk.w) ray -= 1;
-    if (rk.s) ray += 1;
-    if (rk.a) rax -= 1;
-    if (rk.d) rax += 1;
-    movePlayer(remoteP, dt, rax, ray, false);
-    remoteP.aim = remoteInput.aim === undefined ? remoteP.aim : remoteInput.aim;
-    if (rax === 0 && ray === 0) {
-      remoteP.facingX = Math.cos(remoteP.aim);
-      remoteP.facingY = Math.sin(remoteP.aim);
-    }
+    var remoteAim = remoteInput.aim === undefined ? remoteP.aim : remoteInput.aim;
+    var remoteAng = typeof remoteInput.yaw === "number" ? remoteInput.yaw : remoteAim;
+    moveHuman(remoteP, dt, rk, remoteAng, remoteAim);
     if (remoteInput.powers) {
       if (remoteInput.powers.q) useBoost(remoteP);
       if (remoteInput.powers.e) useShield(remoteP);
@@ -1182,19 +1183,21 @@
     });
   };
 
-  Game.setLocalPlayer = function (team, name, charId) {
+  Game.setLocalPlayer = function (team, name, charId, acc) {
     Game.localTeam = team;
     var p = Game.players[team];
     p.name = name;
     p.charId = charId;
+    p.acc = (typeof window !== "undefined" && window.Acc) ? Acc.sanitize(acc) : null;
     var ch = Models3D.getChar(charId);
     applyClass(p, ch.klass);
   };
 
-  Game.setRemotePlayer = function (team, name, charId) {
+  Game.setRemotePlayer = function (team, name, charId, acc) {
     var p = Game.players[team];
     p.name = name;
     p.charId = charId;
+    p.acc = (typeof window !== "undefined" && window.Acc) ? Acc.sanitize(acc) : null;
     var ch = Models3D.getChar(charId);
     applyClass(p, ch.klass);
   };

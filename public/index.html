@@ -4,10 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Captura la Bandera 3D · Avengers Edition</title>
-<link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="stylesheet" href="./styles.css">
-<!-- Three.js: motor 3D principal (debe ir antes que game3d.js) -->
-<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<!-- Three.js: motor 3D principal (debe ir antes que game3d.js).
+     Se sirve desde el propio servidor para que funcione tambien sin Internet. -->
+<script src="./vendor/three.min.js"></script>
 </head>
 <body>
 
@@ -21,7 +21,7 @@
 
 <div id="menu">
   <h1>⚡ CAPTURA LA BANDERA <span class="tag3d">3D</span></h1>
-  <p class="subtitle">Avengers Edition · Multijugador Online · vs Bot</p>
+  <p class="subtitle">Avengers Edition · Multijugador Online · vs Bot · Skins y accesorios 100% gratis</p>
   <input type="text" id="username" placeholder="Tu nombre de usuario" maxlength="14" value="Jugador" autocomplete="off">
 
   <div id="mainButtons">
@@ -31,8 +31,24 @@
   </div>
 
   <div id="charSection" style="display:none">
-    <div class="section-title">Elige tu personaje</div>
+    <div class="section-title">Elige tu personaje <span class="free-tag">27 skins · 100% gratis</span></div>
     <div id="charGrid"></div>
+    <button id="btnToggleAcc" type="button" class="acc-toggle">🎨 Personaliza tu aspecto (accesorios gratis)</button>
+  </div>
+
+  <div id="accSection" style="display:none">
+    <div class="section-title">Accesorios <span class="free-tag">100% GRATIS · se guardan solos</span></div>
+    <div class="acc-wrap">
+      <div class="acc-left">
+        <div class="acc-tabs" id="accTabs"></div>
+        <div class="acc-grid" id="accGrid"></div>
+        <p class="hint-text" id="accHint">Todos los accesorios son gratuitos: no hay tienda, monedas ni niveles.</p>
+      </div>
+      <div class="acc-preview">
+        <canvas id="accPreview" width="300" height="360"></canvas>
+        <div class="acc-preview-note" id="accPreviewNote">Vista previa</div>
+      </div>
+    </div>
   </div>
 
   <div id="mapSection" style="display:none">
@@ -69,6 +85,7 @@
   <div id="waitingSection" style="display:none">
     <p><b>Copia este código y mándaselo a tu amigo:</b></p>
     <div id="roomInfo">---</div>
+    <div id="waitingRival" class="wait-rival">---</div>
     <div class="row">
       <button id="btnCopyCode" type="button">📋 Copiar código</button>
       <button id="btnCopyLink" type="button" class="alt">🔗 Copiar enlace directo</button>
@@ -165,9 +182,11 @@
 
 <script src="./js/sprites.js"></script>
 <script src="./js/audio.js"></script>
+<script src="./js/accessories.js"></script>
 <script src="./js/maps3d.js"></script>
 <script src="./js/net.js"></script>
 <script src="./js/models3d.js"></script>
+<script src="./js/preview3d.js"></script>
 <script src="./js/game.js"></script>
 <script src="./js/game3d.js"></script>
 <script src="./js/ui.js"></script>

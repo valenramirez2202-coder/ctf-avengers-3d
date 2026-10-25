@@ -252,14 +252,14 @@
     Net.room = null;
   }
 
-  Net.host = function (name, charId, mapId) {
+  Net.host = function (name, charId, mapId, acc) {
     Net.role = "host";
-    connect({ type: "create", name: name, charId: charId, mapId: mapId });
+    connect({ type: "create", name: name, charId: charId, mapId: mapId, acc: acc || null });
   };
 
-  Net.join = function (code, name, charId) {
+  Net.join = function (code, name, charId, acc) {
     Net.role = "guest";
-    connect({ type: "join", code: code, name: name, charId: charId });
+    connect({ type: "join", code: code, name: name, charId: charId, acc: acc || null });
   };
 
   Net.relay = function (data) {
@@ -270,8 +270,8 @@
     raw({ type: "start_game" });
   };
 
-  Net.setChar = function (charId) {
-    raw({ type: "set_char", charId: charId });
+  Net.setChar = function (charId, acc) {
+    raw({ type: "set_char", charId: charId, acc: acc || null });
   };
 
   Net.close = function () {
