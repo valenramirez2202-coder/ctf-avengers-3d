@@ -58,6 +58,8 @@
     el("botSection").style.display = "none";
     el("waitingSection").style.display = "none";
     el("endScreen").style.display = "none";
+    var ctlScr = el("controlsScreen");
+    if (ctlScr) ctlScr.classList.remove("show");
     state.accOpen = false;
     var tog = el("btnToggleAcc");
     if (tog) tog.textContent = ACC_TOGGLE_OPEN;
@@ -300,15 +302,39 @@
     buildStanceUI();
 
     state.running = true;
-    Game.running = true;
+    // La partida queda EN PAUSA mostrando la pantalla de controles:
+    // Game.running se activa al pulsar "Empezar", pero el bucle ya corre
+    // para que se vea el mapa 3D detras del cartel.
+    Game.running = false;
     state.lastTime = performance.now();
     state.stats = { shots: 0, time: 0 };
     state.killFeed = [];
     el("killfeed").innerHTML = "";
     updateScoreUI();
     updatePowerUI();
-    showControlsHint();
+    showControlsScreen();
     requestAnimationFrame(loop);
+  }
+
+  /** Muestra la pantalla de teclas antes de empezar (o arranca ya si no existe). */
+  function showControlsScreen() {
+    var scr = el("controlsScreen");
+    if (!scr) {
+      Game.running = true;
+      showControlsHint();
+      return;
+    }
+    scr.classList.add("show");
+  }
+
+  /** Cierra la pantalla de teclas y arranca la partida de verdad. */
+  function startFromControls() {
+    var scr = el("controlsScreen");
+    if (scr) scr.classList.remove("show");
+    Game.running = true;
+    state.lastTime = performance.now();
+    showControlsHint();
+    SFX.beep();
   }
 
   function stopGame() {
@@ -400,6 +426,9 @@
   });
 
   function triggerPower(key) {
+    // Con la pantalla de controles en pantalla no se juega aun.
+    var ctlScr = el("controlsScreen");
+    if (ctlScr && ctlScr.classList.contains("show")) return;
     if (key === "q") {
       if (Game.useBoost(Game.players[Game.localTeam])) SFX.boost();
     } else if (key === "e") {
@@ -452,14 +481,23 @@
     });
   }
 
+  /** Alterna SOLO entre primera y tercera persona (lo que pidio el jugador). */
   function cycleCamera() {
-    var order = ["auto", "tactical", "third", "first"];
+    var order = ["third", "first"];
     var i = order.indexOf(state.camPref);
-    state.camPref = order[(i + 1) % order.length];
+    // Si estaba en auto/tactica, empezamos por tercera persona.
+    state.camPref = i === -1 ? "third" : order[(i + 1) % order.length];
     el("camMode").value = state.camPref;
     View3D.setPref(state.camPref);
     SFX.beep();
-    addFeed("Cámara: " + labelCamera(state.camPref), "gold");
+    var label = labelCamera(state.camPref);
+    addFeed("Cámara: " + label, "gold");
+    // Boton en pantalla que refleja el modo activo.
+    var btn = el("btnCam");
+    if (btn) {
+      btn.textContent = state.camPref === "first" ? "👁 1ª Persona" : "🎥 3ª Persona";
+      btn.classList.toggle("active", state.camPref === "first");
+    }
   }
 
   function labelCamera(mode) {
@@ -740,6 +778,8 @@
       "Eliminaciones: " + Game.kills.red + " - " + Game.kills.blue + "\n" +
       "Duración: " + Math.round(state.stats.time) + "s";
     el("endScreen").style.display = "flex";
+    var ctlScr = el("controlsScreen");
+    if (ctlScr) ctlScr.classList.remove("show");
   }
 
   function endToMenu() {
@@ -932,12 +972,37 @@
     };
     el("btnMenu").onclick = endToMenu;
     el("btnQuit").onclick = endToMenu;
+    // Pantalla de controles: al pulsar "Empezar" arranca la partida.
+    if (el("btnGoPlay")) el("btnGoPlay").onclick = startFromControls;
     el("btnFull").onclick = toggleFullscreen;
     el("btnCam").onclick = cycleCamera;
     el("btnOrbit").onclick = toggleOrbit;
     el("btnPrim").onclick = function () {
       triggerPower("f");
     };
+    // Estado inicial del boton de camara (arranca en 3a persona).
+    (function () {
+      var b = el("btnCam");
+      if (b && state.camPref !== "first") b.textContent = "🎥 3ª Persona";
+    })();
+
+    // Poderes pulsables en pantalla (ademas de con teclas).
+    var powerClicks = { p1: "q", p2: "e", p3: "r", p4: "f" };
+    Object.keys(powerClicks).forEach(function (id) {
+      var node = el(id);
+      if (!node) return;
+      node.style.pointerEvents = "auto";
+      node.style.cursor = "pointer";
+      node.onclick = function () { triggerPower(powerClicks[id]); };
+    });
+
+    // Estancias (1/2/3) pulsables en pantalla.
+    ["st1", "st2", "st3"].forEach(function (id, i) {
+      var node = el(id);
+      if (!node) return;
+      node.style.cursor = "pointer";
+      node.onclick = function () { setClassByIndex(i); buildStanceUI(); SFX.beep(); };
+    });
 
     el("btnCopyCode").onclick = function () {
       var text = el("roomInfo").textContent;
@@ -1289,6 +1354,131 @@
     p4.innerHTML = "<b>F</b> Habilidad";
     powersContainer.appendChild(p4);
   }
+
+  /* ------------------------------------------------------------------ *
+   * Botones movibles (arrastrables) del HUD.
+   *  - Manten y arrastra un boton para colocarlo donde quieras.
+   *  - La posicion se guarda en el navegador (localStorage).
+   *  - Un clic "limpio" sigue funcionando: solo se arrastra si el puntero
+   *    se mueve mas de UMBRAL px, asi no se dispara el poder por error.
+   * ------------------------------------------------------------------ */
+  (function setupDraggableHud() {
+    var STORE = "ctf_hud_pos_v1";
+    var UMBRAL = 8; // px de movimiento para considerar arrastre
+
+    function loadPos() {
+      try { return JSON.parse(localStorage.getItem(STORE) || "{}"); }
+      catch (e) { return {}; }
+    }
+    function savePos(obj) {
+      try { localStorage.setItem(STORE, JSON.stringify(obj)); } catch (e) {}
+    }
+
+    // Restaura posiciones guardadas (solo si siguen en pantalla).
+    function restore() {
+      var pos = loadPos();
+      Object.keys(pos).forEach(function (id) {
+        var node = el(id);
+        if (!node) return;
+        var p = pos[id];
+        node.style.position = "absolute";
+        node.style.left = p.x + "px";
+        node.style.top = p.y + "px";
+        node.style.right = "auto";
+        node.style.bottom = "auto";
+        node.style.transform = "none";
+        node.style.margin = "0";
+        node.classList.add("dragged");
+      });
+    }
+
+    function makeDraggable(node) {
+      if (!node || node.dataset.dragInit) return;
+      node.dataset.dragInit = "1";
+      node.classList.add("draggable");
+
+      var startX = 0, startY = 0, origL = 0, origT = 0;
+      var dragging = false, moved = false;
+
+      node.addEventListener("pointerdown", function (e) {
+        // Solo boton izquierdo o dedo (el derecho sigue para la camara).
+        if (e.pointerType === "mouse" && e.button !== 0) return;
+        var r = node.getBoundingClientRect();
+        startX = e.clientX;
+        startY = e.clientY;
+        origL = r.left;
+        origT = r.top;
+        dragging = true;
+        moved = false;
+        // Captura el puntero para seguir recibiendo eventos al salir.
+        if (node.setPointerCapture) {
+          try { node.setPointerCapture(e.pointerId); } catch (err) {}
+        }
+      });
+
+      node.addEventListener("pointermove", function (e) {
+        if (!dragging) return;
+        var dx = e.clientX - startX;
+        var dy = e.clientY - startY;
+        if (!moved && Math.abs(dx) + Math.abs(dy) < UMBRAL) return;
+        moved = true;
+        // A partir de aqui el boton "vuela": posicion fija en pantalla.
+        node.style.position = "fixed";
+        node.style.zIndex = 999;
+        node.style.left = origL + dx + "px";
+        node.style.top = origT + dy + "px";
+        node.style.right = "auto";
+        node.style.bottom = "auto";
+        node.style.transform = "none";
+        node.style.margin = "0";
+        node.classList.add("dragging");
+      });
+
+      function endDrag(e) {
+        if (!dragging) return;
+        dragging = false;
+        if (node.releasePointerCapture) {
+          try { node.releasePointerCapture(e.pointerId); } catch (err) {}
+        }
+        if (moved) {
+          node.classList.remove("dragging");
+          node.classList.add("dragged");
+          var r = node.getBoundingClientRect();
+          var pos = loadPos();
+          pos[node.id] = { x: Math.round(r.left), y: Math.round(r.top) };
+          savePos(pos);
+          // Evita que el mismo gesto dispare el poder (clic fantasma).
+          e.stopPropagation();
+          e.preventDefault();
+        }
+        moved = false;
+      }
+      node.addEventListener("pointerup", endDrag);
+      node.addEventListener("pointercancel", function (e) {
+        dragging = false;
+        moved = false;
+        node.classList.remove("dragging");
+      });
+    }
+
+    // Se aplican al cargar el DOM.
+    function init() {
+      // Botones de arriba (F, camara, pantalla completa...)
+      document.querySelectorAll("#btnUI button").forEach(makeDraggable);
+      // Poderes de abajo (Boost, Escudo, Disparo, Habilidad)
+      document.querySelectorAll("#powers .power").forEach(makeDraggable);
+      // Estancias (1/2/3)
+      document.querySelectorAll("#stanceBar .stance").forEach(makeDraggable);
+      restore();
+    }
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", init);
+    } else {
+      init();
+    }
+    // El p4 (Habilidad) se crea antes de este bloque, por eso init() lo ve.
+  })();
 
   window.addEventListener("DOMContentLoaded", boot);
   if (document.readyState !== "loading") boot();

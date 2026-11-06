@@ -209,15 +209,99 @@
       root.add(orb);
     }
 
+    /* ---- Extras: para que el mapa no sea "tan sencillo" ---- */
+
+    // Pilares decorativos en las esquinas (con luz en la punta).
+    var pillarMat = new THREE_.MeshStandardMaterial({ color: 0x3a3a62, roughness: 0.5, metalness: 0.4 });
+    var capMat = new THREE_.MeshStandardMaterial({ color: map.accent, emissive: map.accent, emissiveIntensity: 1.3 });
+    [
+      [-W * S / 2 + 1.2, -H * S / 2 + 1.2],
+      [W * S / 2 - 1.2, -H * S / 2 + 1.2],
+      [-W * S / 2 + 1.2, H * S / 2 - 1.2],
+      [W * S / 2 - 1.2, H * S / 2 - 1.2],
+      [0, -H * S / 2 + 1.2],
+      [0, H * S / 2 - 1.2]
+    ].forEach(function (pos) {
+      var pil = new THREE_.Mesh(new THREE_.CylinderGeometry(0.22, 0.28, 2.4, 12), pillarMat);
+      pil.position.set(pos[0], 1.2, pos[1]);
+      pil.castShadow = View.quality !== "low";
+      pil.receiveShadow = true;
+      root.add(pil);
+      var cap = new THREE_.Mesh(new THREE_.SphereGeometry(0.17, 14, 12), capMat);
+      cap.position.set(pos[0], 2.5, pos[1]);
+      root.add(cap);
+    });
+
+    // Cajas/barriles repartidos por el campo (coberturas con estilo).
+    var crateMat = new THREE_.MeshStandardMaterial({ color: 0x54402c, roughness: 0.8, metalness: 0.1 });
+    var barrelMat = new THREE_.MeshStandardMaterial({ color: 0x2f5a6e, roughness: 0.45, metalness: 0.55 });
+    for (var c = 0; c < 14; c++) {
+      var cxp = (Game.rand() - 0.5) * W * S * 0.9;
+      var czp = (Game.rand() - 0.5) * H * S * 0.85;
+      // Se alejan del centro para no tapar el paso principal.
+      if (Math.abs(cxp) < 1.6 && Math.abs(czp) < 1.6) cxp += 3.2;
+      if (Game.rand() < 0.55) {
+        var s = 0.34 + Game.rand() * 0.16;
+        var crate = new THREE_.Mesh(new THREE_.BoxGeometry(s, s, s), crateMat);
+        crate.position.set(cxp, s / 2, czp);
+        crate.rotation.y = Game.rand() * Math.PI;
+        crate.castShadow = View.quality !== "low";
+        crate.receiveShadow = true;
+        root.add(crate);
+      } else {
+        var bar = new THREE_.Mesh(new THREE_.CylinderGeometry(0.2, 0.2, 0.62, 14), barrelMat);
+        bar.position.set(cxp, 0.31, czp);
+        bar.castShadow = View.quality !== "low";
+        bar.receiveShadow = true;
+        root.add(bar);
+      }
+    }
+
+    // Emblema central luminoso (anillo doble girando lento).
+    var emblem = new THREE_.Mesh(
+      new THREE_.TorusGeometry(1.5, 0.05, 8, 64),
+      new THREE_.MeshStandardMaterial({ color: map.accent, emissive: map.accent, emissiveIntensity: 1.1, transparent: true, opacity: 0.75 })
+    );
+    emblem.rotation.x = -Math.PI / 2;
+    emblem.position.y = 0.05;
+    emblem.userData.spin = true;
+    root.add(emblem);
+    var emblem2 = new THREE_.Mesh(
+      new THREE_.TorusGeometry(1.05, 0.04, 8, 56),
+      new THREE_.MeshStandardMaterial({ color: 0xffffff, emissive: map.accent, emissiveIntensity: 0.9, transparent: true, opacity: 0.6 })
+    );
+    emblem2.rotation.x = -Math.PI / 2;
+    emblem2.position.y = 0.05;
+    emblem2.userData.spin = true;
+    root.add(emblem2);
+
+    // Orbes flotantes tambien junto a cada base (dan profundidad).
+    ["red", "blue"].forEach(function (team) {
+      var bx = team === "red" ? -W * S / 2 + 6 : W * S / 2 - 6;
+      for (var k = 0; k < 3; k++) {
+        var tcol = team === "red" ? 0xff3366 : 0x4488ff;
+        var o2 = new THREE_.Mesh(
+          new THREE_.IcosahedronGeometry(0.12, 0),
+          new THREE_.MeshStandardMaterial({ color: tcol, emissive: tcol, emissiveIntensity: 1.5, transparent: true, opacity: 0.85 })
+        );
+        o2.position.set(bx + (k - 1) * 1.4, 1.4 + k * 0.5, (k - 1) * 2.2);
+        o2.userData.baseY = o2.position.y;
+        o2.userData.speed = 0.6 + Game.rand() * 0.5;
+        o2.userData.phase = Game.rand() * Math.PI * 2;
+        root.add(o2);
+      }
+    });
+
     return root;
   }
 
   function buildLighting() {
-    var amb = new THREE_.AmbientLight(0x8899cc, 0.55);
+    // Mas luz ambiente: antes el mapa salia casi negro y "no se veia".
+    var amb = new THREE_.AmbientLight(0x9aa6d8, 0.95);
     scene.add(amb);
 
-    sunLight = new THREE_.DirectionalLight(0xfff2dd, 1.15);
-    sunLight.position.set(6, 12, 8);
+    sunLight = new THREE_.DirectionalLight(0xfff2dd, 1.9);
+    sunLight.position.set(6, 14, 8);
     if (View.quality !== "low") {
       sunLight.castShadow = true;
       // Mapa de sombras mas barato: 1024/768 en vez de 2048/1024. Con el
@@ -236,7 +320,7 @@
     }
     scene.add(sunLight);
 
-    var fill = new THREE_.HemisphereLight(0x88ccff, 0x202030, 0.5);
+    var fill = new THREE_.HemisphereLight(0x99ddff, 0x2a2a40, 0.85);
     scene.add(fill);
 
     // luces de equipo
@@ -424,11 +508,11 @@
     if (THREE_.SRGBColorSpace) renderer.outputColorSpace = THREE_.SRGBColorSpace;
 
     scene = new THREE_.Scene();
-    scene.background = new THREE_.Color(0x080812);
-    // La niebla tenue daba un "muro negro" a 34 unidades (el mapa mide 98x90):
-    // se aleja para que las estructuras lejanas sigan leyendose sin perder la
-    // atmosfera nocturna.
-    scene.fog = new THREE_.Fog(0x080812, 18, 70);
+    // Cielo nocturno mas luminoso: con 0x080812 el mapa salia "apagado".
+    scene.background = new THREE_.Color(0x121a2e);
+    // Niebla mas suave y mas lejos: antes formaba un "muro negro" que
+    // escondia las estructuras del mapa.
+    scene.fog = new THREE_.Fog(0x121a2e, 42, 150);
 
     camera = new THREE_.PerspectiveCamera(50, 16 / 9, 0.1, 120);
     buildLighting();
@@ -653,9 +737,9 @@
 
       // Suelo de distancias: con orbitDist 0.35 y zoom 1.5 la camara quedaba a
       // 0.43 del heroe y su espalda llena la pantalla (se veia un "plano" liso).
-      // Con 3.4 de base el heroe ocupa ~la mitad del encuadre y se ve el campo.
-      var back = Math.max(3, (3.4 / View.zoom) * View.orbitDist);
-      var high = Math.max(1.3, 1.5 / View.zoom);
+      // Mas alejada aun: el heroe ocupa ~1/3 del encuadre y se ve el campo.
+      var back = Math.max(4.6, (5.6 / View.zoom) * View.orbitDist);
+      var high = Math.max(2.6, 3.0 / View.zoom);
       var pitch = View.orbitPitch;
       var behindX = wx(me.x) - Math.cos(camAng) * back * Math.cos(pitch);
       var behindZ = wz(me.y) - Math.sin(camAng) * back * Math.cos(pitch);
@@ -669,9 +753,9 @@
       // en el monton y evitar tirones de memoria.
       _camTarget.set(behindX, View.camY, behindZ);
       _camLookTmp.set(
-        wx(me.x) + Math.cos(camAng) * 2.4,
-        0.9,
-        wz(me.y) + Math.sin(camAng) * 2.4
+        wx(me.x) + Math.cos(camAng) * 3.2,
+        1.25,
+        wz(me.y) + Math.sin(camAng) * 3.2
       );
       if (!firstInit) {
         camPos.copy(_camTarget);
@@ -1025,10 +1109,14 @@
     var env = scene.getObjectByName("environment");
     if (!env) return;
     env.children.forEach(function (child) {
-      if (child.userData && child.userData.baseY !== undefined) {
+      if (!child.userData) return;
+      if (child.userData.baseY !== undefined) {
         child.position.y = child.userData.baseY + Math.sin(Game.time * child.userData.speed + child.userData.phase) * 0.22;
         child.rotation.y += 0.01;
         child.rotation.x += 0.006;
+      } else if (child.userData.spin) {
+        // Emblemas centrales: giro lento en el suelo.
+        child.rotation.z += 0.004;
       }
     });
   }

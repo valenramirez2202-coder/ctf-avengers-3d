@@ -114,7 +114,7 @@ body.cursor-hidden #game3d{cursor:none}
 @keyframes feedIn{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:none}}
 
 #powers{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);display:flex;gap:10px;pointer-events:none;z-index:5}
-.power{background:rgba(0,0,0,.75);border:2px solid #555;border-radius:8px;padding:5px 10px;text-align:center;min-width:86px;font-size:10px;position:relative;overflow:hidden}
+.power{background:rgba(0,0,0,.75);border:2px solid #555;border-radius:8px;padding:5px 10px;text-align:center;min-width:86px;font-size:10px;position:relative;overflow:hidden;pointer-events:auto;touch-action:none;user-select:none}
 .power b{color:var(--cyan)}
 .power.ready{border-color:var(--cyan)}
 .power.cd{opacity:.6;border-color:#555}
@@ -122,8 +122,13 @@ body.cursor-hidden #game3d{cursor:none}
 .power.active{border-color:var(--gold);box-shadow:0 0 16px rgba(255,215,0,.5)}
 
 #stanceBar{position:absolute;bottom:56px;left:50%;transform:translateX(-50%);display:flex;gap:6px;pointer-events:none;z-index:5}
-.stance{background:rgba(0,0,0,.7);border:1px solid #444;border-radius:6px;padding:3px 10px;font-size:9px;color:#999}
+.stance{background:rgba(0,0,0,.7);border:1px solid #444;border-radius:6px;padding:3px 10px;font-size:9px;color:#999;pointer-events:auto;touch-action:none;user-select:none;cursor:grab}
 .stance.active{border-color:var(--gold);color:var(--gold);background:rgba(60,50,0,.7)}
+
+/* Botones movibles: se arrastran con el raton/dedo y guardan su sitio */
+.draggable{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
+.draggable.dragging{cursor:grabbing;opacity:.92;box-shadow:0 8px 22px rgba(0,0,0,.6);z-index:999 !important;pointer-events:auto}
+.draggable.dragged{box-shadow:0 0 0 1px rgba(0,255,204,.35)}
 
 #controlsHint{position:absolute;bottom:92px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.78);padding:5px 14px;border-radius:6px;font-size:10px;color:#ddd;pointer-events:none;white-space:nowrap;z-index:15;transition:opacity .5s;border:1px solid #444}
 #controlsHint.hide{opacity:0}
@@ -141,6 +146,24 @@ body.cursor-hidden #game3d{cursor:none}
 .winner-red{color:var(--crimson);text-shadow:0 0 24px rgba(255,51,102,.6)}
 .winner-blue{color:var(--blue);text-shadow:0 0 24px rgba(68,136,255,.6)}
 .winner-draw{color:var(--gold)}
+
+/* ---------- Pantalla de controles (antes de empezar) ---------- */
+#controlsScreen{display:none;position:absolute;inset:0;background:rgba(4,6,16,.94);z-index:22;align-items:center;justify-content:center;padding:16px;overflow:auto}
+#controlsScreen.show{display:flex}
+.ctl-card{background:rgba(10,14,30,.96);border:2px solid var(--cyan);border-radius:14px;padding:18px 22px;max-width:760px;width:100%;box-shadow:0 0 40px rgba(0,255,204,.25)}
+.ctl-card h2{margin:0 0 4px;text-align:center;font-size:1.5rem;color:#fff}
+.ctl-sub{margin:0 0 14px;text-align:center;font-size:.8rem;color:#9fb6c9}
+.ctl-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px;margin-bottom:16px}
+.ctl-item{display:flex;align-items:center;gap:7px;background:rgba(0,0,0,.45);border:1px solid #2a3550;border-radius:8px;padding:7px 9px;font-size:.78rem;color:#cfe6f5;flex-wrap:wrap}
+.ctl-item span{color:#ffd76a;font-weight:600}
+.ctl-item kbd{background:#132038;border:1px solid var(--cyan);border-bottom-width:2px;border-radius:5px;padding:1px 6px;font-size:.72rem;color:var(--cyan);font-family:inherit;font-weight:700;white-space:nowrap}
+.ctl-go{display:block;width:100%;padding:13px;font-size:1.05rem;font-weight:800;background:linear-gradient(90deg,#00ffcc,#00d1ff);color:#04121a;border:0;border-radius:10px;cursor:pointer;letter-spacing:.5px}
+.ctl-go:hover{filter:brightness(1.1)}
+@media (max-width:760px){
+  .ctl-card{padding:14px}
+  .ctl-grid{grid-template-columns:1fr 1fr;gap:6px}
+  .ctl-item{font-size:.68rem;padding:5px 6px}
+}
 
 /* ---------- Loader ---------- */
 #loader{position:fixed;inset:0;background:#08080f;display:flex;align-items:center;justify-content:center;z-index:100;transition:opacity .4s}
