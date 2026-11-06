@@ -483,10 +483,9 @@
 
   /** Alterna SOLO entre primera y tercera persona (lo que pidio el jugador). */
   function cycleCamera() {
-    var order = ["third", "first"];
-    var i = order.indexOf(state.camPref);
-    // Si estaba en auto/tactica, empezamos por tercera persona.
-    state.camPref = i === -1 ? "third" : order[(i + 1) % order.length];
+    // Un clic siempre cambia lo que se ve: si esta en 1a pasa a 3a,
+    // y cualquier otro modo (auto/tactica) pasa a 1a.
+    state.camPref = state.camPref === "first" ? "third" : "first";
     el("camMode").value = state.camPref;
     View3D.setPref(state.camPref);
     SFX.beep();
@@ -1399,6 +1398,15 @@
 
       var startX = 0, startY = 0, origL = 0, origT = 0;
       var dragging = false, moved = false;
+      var dragEndedAt = 0;
+
+      // Tras arrastrar, se anula el clic "fantasma" que dispararia el poder.
+      node.addEventListener("click", function (e) {
+        if (Date.now() - dragEndedAt < 300) {
+          e.stopPropagation();
+          e.preventDefault();
+        }
+      }, true);
 
       node.addEventListener("pointerdown", function (e) {
         // Solo boton izquierdo o dedo (el derecho sigue para la camara).
@@ -1441,6 +1449,7 @@
           try { node.releasePointerCapture(e.pointerId); } catch (err) {}
         }
         if (moved) {
+          dragEndedAt = Date.now();
           node.classList.remove("dragging");
           node.classList.add("dragged");
           var r = node.getBoundingClientRect();
